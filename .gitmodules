@@ -1,3 +1,7 @@
 [submodule "order_book_engine"]
 	path = order_book_engine
 	url = https://github.com/GM-11/order_book_engine
+
+[submodule "sequencer"]
+	path = sequencer
+	url = https://github.com/GM-11/sequencer
