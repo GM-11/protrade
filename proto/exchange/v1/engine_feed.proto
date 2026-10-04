@@ -1,0 +1,125 @@
+syntax = "proto3";
+package exchange.v1;
+
+import "exchange/v1/commands.proto";
+
+// Engine -> gateway. INTERNAL ONLY: events carry owner ids, which a gateway
+// must strip before anything reaches the public feed.
+service EngineFeed {
+  // One long-lived stream per gateway. For each requested symbol it sends one
+  // BookSnapshot, then every MarketEvent for that symbol numbered
+  // snapshot.as_of_seq + 1, + 2, ... with no gaps. It also carries every
+  // Reply addressed to this gateway_id (replies are not numbered and are
+  // never resent).
+  //
+  // There is no replay. To recover from anything (a dropped connection, a
+  // gap, being dropped for falling behind), subscribe again: you get fresh
+  // snapshots.
+  //
+  // Errors: INVALID_ARGUMENT empty gateway_id; NOT_FOUND unknown symbol;
+  // ALREADY_EXISTS this gateway_id already has a stream; RESOURCE_EXHAUSTED
+  // you fell behind and were dropped; UNAVAILABLE the engine is stopping.
+  //
+  // A snapshot of a deep book can be several MB: raise the client's
+  // max receive message size if needed (gRPC's default is 4 MB).
+  rpc Subscribe(FeedSubscribeRequest) returns (stream FeedMessage);
+}
+
+message FeedSubscribeRequest {
+  string gateway_id = 1;
+  repeated uint32 symbols = 2; // empty = every symbol
+}
+
+message FeedMessage {
+  oneof body {
+    BookSnapshot snapshot = 1;
+    MarketEvent event = 2;
+    Reply reply = 3;
+  }
+}
+
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  EVENT_KIND_ACCEPTED = 1;
+  EVENT_KIND_RESTED = 2;
+  EVENT_KIND_TRADE = 3;
+  EVENT_KIND_CANCELLED = 4;
+  EVENT_KIND_MODIFIED = 5;
+  EVENT_KIND_REPLACED = 6;
+  EVENT_KIND_STOP_ACCEPTED = 7;
+  EVENT_KIND_STOP_TRIGGERED = 8;
+  EVENT_KIND_STOP_CANCELLED = 9;
+  EVENT_KIND_STOP_MODIFIED = 10;
+  EVENT_KIND_HALTED = 11;
+  EVENT_KIND_RESUMED = 12;
+}
+
+// One thing the engine did. Mirrors engine::EngineEvent field for field.
+message MarketEvent {
+  uint32 symbol = 1;
+  uint64 seq = 2;          // per symbol, starts at 1, no gaps
+  EventKind kind = 3;
+  int64 ts = 4;            // milliseconds, the sequencer's clock
+  uint64 order_id = 5;     // Trade: the aggressor (incoming) order
+  uint64 passive_id = 6;   // Trade only: the resting order
+  uint64 owner_id = 7;     // Trade: the buyer
+  uint64 other_owner = 8;  // Trade: the seller
+  Side side = 9;           // Trade: the aggressor's side
+  optional int64 price = 10;       // absent: market order, Resumed. Stops: the stop price
+  int64 quantity = 11;             // fill, rested, remaining or cancelled quantity
+  optional int64 limit_price = 12; // stop events only; absent = stop-market
+}
+
+enum RejectReason {
+  REJECT_REASON_UNSPECIFIED = 0;
+  REJECT_REASON_NONE = 1; // accepted
+  REJECT_REASON_INVALID_PRICE = 2;
+  REJECT_REASON_INVALID_QUANTITY = 3;
+  REJECT_REASON_SELF_TRADE = 4;
+  REJECT_REASON_POOL_EXHAUSTED = 5;
+  REJECT_REASON_SYMBOL_HALTED = 6;
+  REJECT_REASON_UNKNOWN_ORDER = 7;
+  REJECT_REASON_DUPLICATE_ORDER_ID = 8;
+  REJECT_REASON_TOO_LATE = 9;
+  REJECT_REASON_PRICE_BAND = 10;
+  REJECT_REASON_PRICE_COLLAR = 11;
+  REJECT_REASON_STOP_WOULD_TRIGGER = 12;
+}
+
+// The engine's private answer to one request.
+message Reply {
+  string gateway_id = 1;
+  uint64 request_id = 2;
+  uint32 symbol = 3;
+  RejectReason reject_reason = 4;
+  int64 unaccepted_quantity = 5;    // rejected or discarded, not on the book
+  optional int64 rested_price = 6;  // set when a limit remainder rested at the band edge
+}
+
+message RestingOrder {
+  uint64 order_id = 1;
+  uint64 owner_id = 2;
+  int64 price = 3;
+  int64 quantity = 4; // remaining
+  int64 filled = 5;   // filled so far
+}
+
+message DormantStop {
+  uint64 order_id = 1;
+  uint64 owner_id = 2;
+  Side side = 3;
+  int64 stop_price = 4;
+  optional int64 limit_price = 5; // absent = stop-market
+  int64 quantity = 6;
+}
+
+// The full book, order by order. Apply events with seq > as_of_seq to it.
+message BookSnapshot {
+  uint32 symbol = 1;
+  uint64 as_of_seq = 2;             // 0 = no events yet
+  repeated RestingOrder bids = 3;   // best price first, queue order within a price
+  repeated RestingOrder asks = 4;
+  repeated DormantStop stops = 5;   // private: for each owner's own open stops
+  optional int64 last_trade_price = 6;
+  bool halted = 7;
+}
