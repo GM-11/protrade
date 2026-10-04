@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "partitions": 2,
+  "instruments": [
+    { "id": 1, "ticker": "MOOG",      "partition": 0, "band_bps": 1000 },
+    { "id": 2, "ticker": "BANANA",    "partition": 0, "band_bps": 1000 },
+    { "id": 3, "ticker": "TESLO",     "partition": 1, "band_bps": 1000 },
+    { "id": 4, "ticker": "MACROHARD", "partition": 1, "band_bps": 1000 }
+  ]
+}
