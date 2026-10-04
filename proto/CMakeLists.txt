@@ -7,16 +7,17 @@ file(MAKE_DIRECTORY ${GEN_DIR})
 
 set(COMMANDS_PROTO  ${PROTO_ROOT}/exchange/v1/commands.proto)
 set(SEQUENCER_PROTO ${PROTO_ROOT}/exchange/v1/sequencer.proto)
+set(ENGINE_FEED_PROTO ${PROTO_ROOT}/exchange/v1/engine_feed.proto)
 
 add_library(exchange_proto STATIC)
 
 protobuf_generate(TARGET exchange_proto
-  PROTOS ${COMMANDS_PROTO} ${SEQUENCER_PROTO}
+  PROTOS ${COMMANDS_PROTO} ${SEQUENCER_PROTO} ${ENGINE_FEED_PROTO}
   IMPORT_DIRS ${PROTO_ROOT}
   PROTOC_OUT_DIR ${GEN_DIR})
 
 protobuf_generate(TARGET exchange_proto
-  PROTOS ${SEQUENCER_PROTO}
+  PROTOS ${SEQUENCER_PROTO} ${ENGINE_FEED_PROTO}
   LANGUAGE grpc
   GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
   PLUGIN "protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
