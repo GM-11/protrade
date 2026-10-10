@@ -1,31 +1,32 @@
-// proto/exchange/v1/cash_owner.proto
 syntax = "proto3";
 package exchange.v1;
 
 import "exchange/v1/commands.proto";
 
 service CashOwner {
-  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderAck); // unary first; stream later
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderAck);
 }
 
 message PlaceOrderRequest {
-  uint64 account_id = 1; // stamped by the order gateway from the verified token
-  uint64 client_request_id = 2; // random uint64 made by the client; key = (account_id, client_request_id)
-  uint32 symbol = 3;
+  uint64 account_id = 1; // from the verified token
+  uint64 client_request_id = 2; // random uint64 made by the client; unique only within one account
+  uint32 symbol = 3; // symbol_id from refdata
   Side side = 4;
-  int64 price_paise = 5;
-  int64 quantity = 6;
-  string gateway_id = 7; // added by the adapter, not by core
+  int64 price_minor = 5; // limit price, integer minor, > 0
+  int64 quantity = 6; // > 0
+  string gateway_id = 7; // which gateway to send the engine's Reply to; stamped by the gateway itself
 }
 
-enum RejectReason {
-  REJECT_REASON_UNSPECIFIED = 0;
-  REJECT_INSUFFICIENT_CASH = 1;
-  REJECT_INSUFFICIENT_HOLDINGS = 2;
+// Named CashRejectReason (not RejectReason): engine_feed.proto already has a
+// RejectReason in this package, and proto enum values share the package scope.
+enum CashRejectReason {
+  CASH_REJECT_REASON_UNSPECIFIED = 0;
+  CASH_REJECT_REASON_INSUFFICIENT_CASH = 1;
+  CASH_REJECT_REASON_INSUFFICIENT_HOLDINGS = 2;
 }
 
 message PlaceOrderAck {
-  bool accepted = 1; // true = cash locked and forwarded, NOT filled
-  RejectReason reason = 2; // set only when accepted == false
-  int64 shortfall_paise = 3; // optional detail for INSUFFICIENT_CASH
+  bool accepted = 1;
+  CashRejectReason reason = 2; // set only when accepted == false
+  int64 shortfall_minor = 3; // INSUFFICIENT_CASH only: how much more cash was needed
 }
