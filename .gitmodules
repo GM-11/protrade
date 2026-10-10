@@ -5,3 +5,7 @@
 [submodule "sequencer"]
 	path = sequencer
 	url = https://github.com/GM-11/sequencer
+
+[submodule "order_gateway"]
+	path = order_gateway
+	url = https://github.com/GM-11/order_gateway
