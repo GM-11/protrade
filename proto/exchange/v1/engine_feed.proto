@@ -89,11 +89,13 @@ enum RejectReason {
 // The engine's private answer to one request.
 message Reply {
   string gateway_id = 1;
-  uint64 request_id = 2;
+  uint64 client_request_id = 2; // random uint64 made by the client; unique only within one account
   uint32 symbol = 3;
   RejectReason reject_reason = 4;
   int64 unaccepted_quantity = 5;    // rejected or discarded, not on the book
   optional int64 rested_price = 6;  // set when a limit remainder rested at the band edge
+  uint64 account_id = 7;            // with client_request_id, the request key
+  uint64 order_id = 8;              // new order/stop: the id it was given. cancel/modify: the target order id
 }
 
 message RestingOrder {
