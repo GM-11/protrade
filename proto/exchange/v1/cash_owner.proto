@@ -9,7 +9,7 @@ service CashOwner {
 
 message PlaceOrderRequest {
   uint64 account_id = 1; // from the verified token
-  uint64 client_request_id = 2; // random uint64 made by the client; unique only within one account
+  string client_order_id = 2; // chosen by the client, 1-48 chars [A-Za-z0-9_-], case-sensitive; unique only within one account
   uint32 symbol = 3; // symbol_id from refdata
   Side side = 4;
   int64 price_minor = 5; // limit price, integer minor, > 0
