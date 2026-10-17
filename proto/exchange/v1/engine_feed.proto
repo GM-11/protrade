@@ -11,6 +11,7 @@ service EngineFeed {
 message FeedSubscribeRequest {
   string gateway_id = 1;
   repeated uint32 symbols = 2; // empty = every symbol
+  map<uint32, uint64> from_seq = 3;   // symbol → first event seq wanted; absent = snapshot + live. Bridge only. [later]
 }
 
 message RepliesSubscribeRequest {
@@ -40,6 +41,8 @@ enum EventKind {
   EVENT_KIND_STOP_MODIFIED = 10;
   EVENT_KIND_HALTED = 11;
   EVENT_KIND_RESUMED = 12;
+  EVENT_KIND_REJECTED = 13;   // new order / new stop refused by the engine (never on the book)
+  EVENT_KIND_EXPIRED = 14;    // unfilled remainder discarded (market / IOC) — quantity = the discarded amount
 }
 
 // One thing the engine did. Mirrors engine::EngineEvent field for field.
@@ -56,6 +59,8 @@ message MarketEvent {
   optional int64 price = 10; // absent: market order, Resumed. Stops: the stop price
   int64 quantity = 11; // fill, rested, remaining or cancelled quantity
   optional int64 limit_price = 12; // stop events only; absent = stop-market
+  string client_order_id = 13;      // ACCEPTED, STOP_ACCEPTED, REJECTED, EXPIRED only. PRIVATE: public consumers must strip it
+  RejectReason reject_reason = 14;  // REJECTED only
 }
 
 enum RejectReason {

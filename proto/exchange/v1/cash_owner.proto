@@ -2,9 +2,17 @@ syntax = "proto3";
 package exchange.v1;
 
 import "exchange/v1/commands.proto";
+import "exchange/v1/engine_feed.proto";   // RejectReason
 
 service CashOwner {
-  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderAck);
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderAck);            // order gateway
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderAck);         // order gateway
+  rpc ModifyOrder(ModifyOrderRequest) returns (ModifyOrderAck);         // order gateway [later]
+  rpc GetAccount(GetAccountRequest) returns (AccountSnapshot);          // order gateway
+  rpc GetOrders(GetOrdersRequest) returns (GetOrdersResponse);          // order gateway
+  rpc SubscribeAccountUpdates(AccountUpdatesRequest) returns (stream AccountUpdate);  // order gateway
+  rpc Deposit(TransferRequest) returns (TransferAck);                   // funds
+  rpc Withdraw(TransferRequest) returns (TransferAck);                  // funds
 }
 
 message PlaceOrderRequest {
@@ -12,9 +20,12 @@ message PlaceOrderRequest {
   string client_order_id = 2; // chosen by the client, 1-48 chars [A-Za-z0-9_-], case-sensitive; unique only within one account
   uint32 symbol = 3; // symbol_id from refdata
   Side side = 4;
-  int64 price_minor = 5; // limit price, integer minor, > 0
+  int64 price_minor = 5; // limit price, integer minor, > 0 (market orders: the protection cap)
   int64 quantity = 6; // > 0
   string gateway_id = 7; // which gateway to send the engine's Reply to; stamped by the gateway itself
+  TimeInForce time_in_force = 8;  // UNSPECIFIED = GTC
+  OrderType type = 9;             // UNSPECIFIED = LIMIT
+  optional int64 stop_price_minor = 10;   // [later]
 }
 
 // Named CashRejectReason (not RejectReason): engine_feed.proto already has a
@@ -23,10 +34,89 @@ enum CashRejectReason {
   CASH_REJECT_REASON_UNSPECIFIED = 0;
   CASH_REJECT_REASON_INSUFFICIENT_CASH = 1;
   CASH_REJECT_REASON_INSUFFICIENT_HOLDINGS = 2;
+  CASH_REJECT_REASON_UNKNOWN_ACCOUNT = 3;
+  CASH_REJECT_REASON_EXCHANGE_BUSY = 4;          // sequencer BUSY — not placed, safe to retry
+  CASH_REJECT_REASON_UNKNOWN_SYMBOL = 5;
+  CASH_REJECT_REASON_EXCHANGE_UNAVAILABLE = 6;   // sequencer NOT_RUNNING — not placed, safe to retry
+  CASH_REJECT_REASON_NOT_SUPPORTED = 7;          // type/tif not built yet
 }
 
 message PlaceOrderAck {
-  bool accepted = 1;
-  CashRejectReason reason = 2; // set only when accepted == false
-  int64 shortfall_minor = 3; // INSUFFICIENT_CASH only: how much more cash was needed
+  bool accepted = 1;                 // true = sequencer acked; engine Reply will follow on SubscribeReplies
+  CashRejectReason reason = 2;       // set only when accepted == false
+  int64 shortfall_minor = 3;         // INSUFFICIENT_CASH only: how much more cash was needed
+  bool duplicate = 4;                // this (account, client_order_id) was seen before
+  OrderState order = 5;              // set when duplicate: the order as it stands now
 }
+
+message CancelOrderRequest { uint64 account_id = 1; uint32 symbol = 2; uint64 order_id = 3; string gateway_id = 4; }
+enum CancelRejectReason {
+  CANCEL_REJECT_REASON_UNSPECIFIED = 0; CANCEL_REJECT_REASON_ORDER_NOT_FOUND = 1;
+  CANCEL_REJECT_REASON_ORDER_CLOSED = 2; CANCEL_REJECT_REASON_EXCHANGE_BUSY = 3;
+  CANCEL_REJECT_REASON_EXCHANGE_UNAVAILABLE = 4;
+}
+message CancelOrderAck { bool accepted = 1; CancelRejectReason reason = 2; OrderState order = 3; }
+
+message ModifyOrderRequest { uint64 account_id = 1; uint32 symbol = 2; uint64 order_id = 3; string gateway_id = 4;
+                             optional int64 new_price_minor = 5; optional int64 new_quantity = 6; }   // [later]
+message ModifyOrderAck { bool accepted = 1; CashRejectReason reason = 2; int64 shortfall_minor = 3; OrderState order = 4; }
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0; ORDER_STATUS_PENDING_NEW = 1; ORDER_STATUS_NEW = 2;
+  ORDER_STATUS_PARTIALLY_FILLED = 3; ORDER_STATUS_FILLED = 4; ORDER_STATUS_CANCELED = 5;
+  ORDER_STATUS_REJECTED = 6; ORDER_STATUS_EXPIRED = 7; ORDER_STATUS_PENDING_CANCEL = 8;
+  ORDER_STATUS_PENDING_REPLACE = 9;
+}
+message OrderState {
+  uint64 account_id = 1; string client_order_id = 2; uint32 symbol = 3; uint64 order_id = 4;  // 0 = not known yet
+  Side side = 5; OrderType type = 6; TimeInForce time_in_force = 7;
+  int64 price_minor = 8; optional int64 stop_price_minor = 9;
+  int64 quantity = 10; int64 filled_quantity = 11; int64 filled_notional_minor = 12;  // avg = notional / filled
+  OrderStatus status = 13; RejectReason engine_reject_reason = 14; CashRejectReason cash_reject_reason = 15;
+  int64 created_ts = 16; int64 updated_ts = 17;
+}
+
+message GetAccountRequest { uint64 account_id = 1; }
+message Position { uint32 symbol = 1; int64 free_qty = 2; int64 locked_qty = 3; int64 avg_price_minor = 4; int64 realized_pnl_minor = 5; }
+message Balances { int64 cash_free_minor = 1; int64 cash_locked_minor = 2; int64 realized_pnl_minor = 3; }
+message AccountSnapshot {
+  bool found = 1; uint64 account_id = 2; uint64 account_seq = 3;
+  Balances balances = 4; repeated Position positions = 5; repeated OrderState open_orders = 6;
+}
+
+message GetOrdersRequest {
+  uint64 account_id = 1;
+  enum Filter { FILTER_UNSPECIFIED = 0; FILTER_OPEN = 1; FILTER_CLOSED = 2; FILTER_ALL = 3; }
+  Filter filter = 2;
+  optional uint64 order_id = 3; optional uint32 symbol = 4;   // both set = one order by order_id
+  optional string client_order_id = 5;                        // one order by client id
+}
+message GetOrdersResponse { repeated OrderState orders = 1; }
+
+message AccountUpdatesRequest { string gateway_id = 1; }
+message AccountUpdate {
+  uint64 account_id = 1;
+  uint64 account_seq = 2;         // per account, +1 per update, no gaps
+  int64 ts = 3;
+  oneof cause {
+    OrderEvent order_event = 4;
+    TransferEvent transfer = 5;
+  }
+  Balances balances = 6;          // AFTER this update
+  repeated Position positions = 7;  // only positions changed by this update, AFTER
+}
+message OrderEvent {
+  enum Kind { KIND_UNSPECIFIED = 0; KIND_NEW = 1; KIND_PARTIAL_FILL = 2; KIND_FILL = 3; KIND_CANCELED = 4;
+              KIND_CANCEL_REJECTED = 5; KIND_REJECTED = 6; KIND_EXPIRED = 7; KIND_REPLACED = 8; KIND_REPLACE_REJECTED = 9; }
+  Kind kind = 1;
+  OrderState order = 2;           // AFTER this event
+  int64 fill_price_minor = 3;     // fills only
+  int64 fill_quantity = 4;        // fills only
+  uint64 engine_seq = 5;          // the engine's per-symbol event seq that caused it
+}
+message TransferEvent { string transfer_id = 1; bool deposit = 2; int64 amount_minor = 3; }
+
+message TransferRequest { string transfer_id = 1; uint64 account_id = 2; int64 amount_minor = 3; }
+enum TransferStatus { TRANSFER_STATUS_UNSPECIFIED = 0; TRANSFER_STATUS_APPLIED = 1; TRANSFER_STATUS_DUPLICATE = 2;
+                      TRANSFER_STATUS_INSUFFICIENT_CASH = 3; TRANSFER_STATUS_UNKNOWN_ACCOUNT = 4; }
+message TransferAck { TransferStatus status = 1; int64 shortfall_minor = 2; Balances balances = 3; uint64 account_seq = 4; }
