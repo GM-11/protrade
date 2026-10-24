@@ -14,3 +14,15 @@
 [submodule "cash_owner"]
 	path = order_gateway
 	url = https://github.com/GM-11/cash_owner
+
+[submodule "engine_events_bridge"]
+	path = engine_events_bridge
+	url = https://github.com/GM-11/engine_events_bridge
+
+[submodule "authentication"]
+	path = authentication
+	url = https://github.com/GM-11/protrade-auth
+
+[submodule "funds"]
+	path = funds
+	url = https://github.com/GM-11/protrade-funds-service
