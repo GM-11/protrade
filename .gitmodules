@@ -19,10 +19,10 @@
 	path = engine_events_bridge
 	url = https://github.com/GM-11/engine_events_bridge
 
-[submodule "authentication"]
+[submodule "protrad-auth"]
 	path = authentication
 	url = https://github.com/GM-11/protrade-auth
 
-[submodule "funds"]
+[submodule "protrade-funds-service"]
 	path = funds
 	url = https://github.com/GM-11/protrade-funds-service

@@ -1,10 +1,11 @@
 package protrader.funds;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class FundsApplicationTests {
+import protrader.funds.support.IntegrationTest;
+
+/** The whole app starts against real Postgres (Flyway migration applied). */
+class FundsApplicationTests extends IntegrationTest {
 
 	@Test
 	void contextLoads() {
