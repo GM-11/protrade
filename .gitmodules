@@ -26,3 +26,7 @@
 [submodule "protrade-funds-service"]
 	path = funds
 	url = https://github.com/GM-11/protrade-funds-service
+
+[submodule "market_data_gateway"]
+	path = market_data_gateway
+	url = https://github.com/GM-11/market_data_gateway
